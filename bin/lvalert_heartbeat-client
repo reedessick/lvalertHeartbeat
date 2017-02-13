@@ -1,0 +1,35 @@
+#!/usr/bin/python
+
+usage = "lvalert_heartbeat-client name"
+description = "a simple wrapper around a lvalert_heartbeat function calls meant to be used with lvalert_listen"
+author = "Reed Essick (reed.essick@ligo.org)"
+
+#-------------------------------------------------
+
+import sys
+import json
+
+import lvalert_heartbeat
+
+from optparse import OptionParser
+
+#-------------------------------------------------
+
+parser = OptionParser(usage=usage, description=description)
+
+parser.add_option('-v', '--verbose', default=False, action='store_true')
+
+opts, args = parser.parse_args()
+
+assert len(args)==1, 'please supply exactly 1 input argument\n%s'%usage
+name = args[0]
+
+#-------------------------------------------------
+
+### read in json packet
+if opts.verbose:
+    print "reading json packet from STDIN"
+alert = json.loads( sys.stdin.read() )
+
+### delegate to response function
+lvalert_heartbeat.respond( name, alert, verbose=opts.verbose )

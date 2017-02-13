@@ -6,6 +6,8 @@ author = "Reed Essick (reed.essick@ligo.org)"
 
 #-------------------------------------------------
 
+import lvalert_heartbeat
+
 import subprocess as sp
 
 from optparse import OptionParser
@@ -15,6 +17,10 @@ from optparse import OptionParser
 parser = OptionParser(usage=usage, description=description)
 
 parser.add_option('-v', '--verbose', default=False, action='store_true')
+parser.add_option('-V', '--Verbose', default=False, action='store_true')
+
+parser.add_option('-s', '--server', defualt='lvalert.cgca.uwm.edu', type='string')
+parser.add_option('-n', '--netrc', default=os.getenv('NETRC', os.path.expanduser('~/.netrc')), type='string')
 
 parser.add_option('', '--request', default=False, action='store_true')
 parser.add_option('', '--respond', default=False, action='store_true')
@@ -22,15 +28,24 @@ parser.add_option('', '--poll', default=False, action='store_true')
 
 opts, args = parser.parse_args()
 
+parser.verbose = opts.verbose or opts.Verbose
+
+#-------------------------------------------------
+
+node = lvalert_heartbeat.randkey() ### get a random node name for the test node
+raise NotImplementedError, 'need to set up a test node, which we create for this run and then clean up when finished'
+
 #-------------------------------------------------
 
 if opts.request: 
     if opts.verbose:
         print( "testing lvalert_hearbeat.request" )
 
+    key = lvalert_heartbeat.randkey()
+    request( key, opts.server, node, netrc=opts.netrc, verbose=opts.Verbose )
     raise NotImplementedError, 'testing lvalert_heartbeat.request'
 
-#---
+#------------------------
 
 if opts.respond
     if opts.verbose:
@@ -38,10 +53,14 @@ if opts.respond
 
     raise NotImplementedError, 'testing lvalert_heartbeat.respond'
 
-#---
+#------------------------
 
 if opts.poll:
     if opts.verbose:
         print( "testing lvalert_heartbeat.poll" )
 
     raise NotImplementedError, 'testing lvalert_heartbeat.poll'
+
+#-------------------------------------------------
+
+raise NotImplementedError, 'need to clean up test node!'

@@ -153,12 +153,18 @@ class Packet(dict):
 
 #-------------------------------------------------
 
+def randkey():
+    """
+    generate a random key to keep track of which alerts belong to which request
+    """
+    return binascii.b2a_hex(os.urandom(15))
+
 def send( alert, server, node, netrc, retry=0 ):
     """
     actually sends the alert via the pubsub node
     """
     username, password = netrc.netrc(netrc).authenticators(server)
-    client = HeatbeatClient( JID(username+"@"+server+"/"+binascii.b2a_hex(os.urandom(15))), password, node, retry=retry )
+    client = HeatbeatClient( JID(username+"@"+server+"/"+randkey()), password, node, retry=retry )
 
     client.connect()
     client.sendMessage(alert.dumps(), JID("pubsub."+server))
@@ -174,7 +180,7 @@ def poll(server, node, netrc=os.getenv('NETRC', os.path.join(os.path.expanduser(
     reads in responses as they come (through a multiprocessing connection) and times out after a specified amount of time
     """
     ### set up key associated with this request, used in case there are multiple requests sent simulatneously (which shouldn't happen, but this is a safety net)
-    key = binascii.b2a_hex(os.urandom(15))
+    key = randkey()
 
     ### set up listener
     if verbose:
@@ -184,7 +190,7 @@ def poll(server, node, netrc=os.getenv('NETRC', os.path.join(os.path.expanduser(
 
     ### set up the client
     username, password = netrc.netrc(netrc).authenticators(server)
-    client = HeartbeatClient( JID(username+"@"+server+"/"+binascii.b2a_hex(os.urandom(15))), password, node, key, connection=conn2 )
+    client = HeartbeatClient( JID(username+"@"+server+"/"+randkey()), password, node, key, connection=conn2 )
 
     ### set up process
     proc = mp.Process(target=client.loop, args=(wait)) 
@@ -192,9 +198,9 @@ def poll(server, node, netrc=os.getenv('NETRC', os.path.join(os.path.expanduser(
     conn2.close() ### close the forked proc's end of the connection
 
     ### send a request
-    if opts.verbose:
+    if verbose:
         print( "sending request" )
-    request( key, server, node, verbose=verbose, netrc=netrc )
+    request( key, server, node, verbose=verbose, netrc=netrc, verbose=verbose )
 
     ### read in responses in a loop
     if verbose:
@@ -221,12 +227,15 @@ def poll(server, node, netrc=os.getenv('NETRC', os.path.join(os.path.expanduser(
 
 #------------------------
 
-def request( key, server, node, netrc=os.getenv('NETRC', os.path.join(os.path.expanduser('~'), '.netrc')) ):
+def request( key, server, node, netrc=os.getenv('NETRC', os.path.join(os.path.expanduser('~'), '.netrc')), verbose=False ):
     """
     send out request packets
     """
     ### format and send the packet
-    send( Packet(server, node, ptype='request', key=key), server, node, netrc )
+    packet = Packet(server, node, ptype='request', key=key)
+    if verbose:
+        print( "%s->%s : %s"%(server, node, packet.dumps()) )
+    send( packet, server, node, netrc )
 
 #---
 

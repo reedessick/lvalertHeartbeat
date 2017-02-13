@@ -8,6 +8,6 @@ We provide 2 executables
 
 The scope is to make this a callable service that can be plugged into Nagios.
 
-## prerequisites
+## dependencies
 
-this package depends on some standard libraries in addition to LVAlert.
+This package depends on some standard libraries in addition to LVAlert.

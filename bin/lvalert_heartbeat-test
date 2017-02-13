@@ -1,0 +1,47 @@
+#!/usr/bin/python
+
+usage = "lvalert_heartbeat-test [--options]"
+description = "a script that tests the heartbeat functionality"
+author = "Reed Essick (reed.essick@ligo.org)"
+
+#-------------------------------------------------
+
+import subprocess as sp
+
+from optparse import OptionParser
+
+#-------------------------------------------------
+
+parser = OptionParser(usage=usage, description=description)
+
+parser.add_option('-v', '--verbose', default=False, action='store_true')
+
+parser.add_option('', '--request', default=False, action='store_true')
+parser.add_option('', '--respond', default=False, action='store_true')
+parser.add_option('', '--poll', default=False, action='store_true')
+
+opts, args = parser.parse_args()
+
+#-------------------------------------------------
+
+if opts.request: 
+    if opts.verbose:
+        print( "testing lvalert_hearbeat.request" )
+
+    raise NotImplementedError, 'testing lvalert_heartbeat.request'
+
+#---
+
+if opts.respond
+    if opts.verbose:
+        print( "testing lvalert_heartbeat.respond" )
+
+    raise NotImplementedError, 'testing lvalert_heartbeat.respond'
+
+#---
+
+if opts.poll:
+    if opts.verbose:
+        print( "testing lvalert_heartbeat.poll" )
+
+    raise NotImplementedError, 'testing lvalert_heartbeat.poll'

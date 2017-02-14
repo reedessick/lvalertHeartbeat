@@ -98,10 +98,10 @@ class HeartbeatPollClient(Client):
     lifted with some modification from lvalert_listen
     """
 
-    def __init__(self, jid, password, node, key=None, connection=None, retry=0, verbose=False):
+    def __init__(self, jid, password, node, key=None, connection=None, verbose=False):
         self.node = node
-
         self.verbose=verbose
+
         # setup client with provided connection information and identity data
         Client.__init__(self, jid, password,
             auth_methods=["sasl:GSSAPI", "sasl:PLAIN"],
@@ -125,6 +125,12 @@ class HeartbeatHandler(object):
         self.connection = connection
         self.key = key
 
+    def get_message_handlers(self):
+        """
+        lifted from lvalert_listen
+        """
+        return [(None, self.message)]
+
     def message(self, stanza):
         """
         returns True to show that the stanza should not be processed further
@@ -135,11 +141,13 @@ class HeartbeatHandler(object):
             node = node.prop("node")
         else:
             if self.client.verbose:
-                print "could not extract node from stanza"
+                print( "could not extract node from stanza" )
             return True ### exit here
 #            raise RuntimeError, "could not extract node from stanza"
 
-        if node!=client.node: ### we're not interested in this node, so we just return True
+        if node!=self.client.node: ### we're not interested in this node, so we just return True
+            if self.client.verbose:
+                print( "uninteresting node=%s"%node )
             return True
 
         ### extract the content from the stanza
@@ -153,20 +161,30 @@ class HeartbeatHandler(object):
                 c.next
         else:
             if self.client.verbose:
-                print "could not extract entry from stanza"
+                print( "could not extract entry from stanza" )
             return True ### exit here
 #            raise RuntimeError, "could not extract entry from stanza"
         
         ### process entry
-        packet = Packet(None, client.node)
+        packet = Packet(None, self.client.node)
         packet.loads( entry )
-        if packet.isResponse() and (packet['key']==self.key): ### send this if it's interesting and we have a connection
-            if connection!=None:
-                if self.client.verbose:
+        if packet.isResponse(): ### this is a resopnse message
+            if packet['key']==self.key: ### the key matches what we expect
+                if self.connection!=None:
+                    if self.client.verbose:
+                        print( "RESPONSE : "+packet.dumps() )
+                    self.connection.send( packet )
+
+                elif self.client.verbose:
                     print( "RESPONSE : "+packet.dumps() )
-                connection.send( packet )
+
             elif self.client.verbose:
-                print( "RESPONSE : "+packet.dumps() )
+                print( "WRONG KEY : "+packet.dumps() )
+
+        elif packet.isRequest():
+            if self.client.verbose:
+                print( "REQUEST : "+packet.dumps() )
+
         elif self.client.verbose:
             print( "UNKNOWN : "+packet.dumps() )
 
@@ -261,6 +279,7 @@ def poll(server, node, netrc=os.getenv('NETRC', os.path.join(os.path.expanduser(
     client = HeartbeatPollClient( JID(username+"@"+server+"/"+randkey()), password, node, key, connection=conn2 )
 
     ### set up process
+    client.connect()
     proc = mp.Process(target=client.loop, args=(wait,)) 
     proc.start() ### start it 
     conn2.close() ### close the forked proc's end of the connection
@@ -272,17 +291,19 @@ def poll(server, node, netrc=os.getenv('NETRC', os.path.join(os.path.expanduser(
 
     ### read in responses in a loop
     if verbose:
-        print( "listening" )
+        print( "listening for %.1f sec"%timeout )
     responses = []
     end = time.time() + timeout
-    while proc.is_alive() and (time.time() < end):
+    while time.time() < end:
         if conn1.poll(): ### there's something to read
             responses.append( conn1.recv() )
         time.sleep(wait)
 
     if proc.is_alive():
         proc.terminate() ### kill process because we're done with it
+    proc.join() ### ensure cleanup signal was sent
     conn1.close()
+    client.disconnect()
 
     ### return all the responses received
     if verbose:

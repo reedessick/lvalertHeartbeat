@@ -41,24 +41,29 @@ parser.add_option('', '--respond', default=False, action='store_true',
 parser.add_option('', '--poll', default=False, action='store_true',
     help="test polling the network")
 
+parser.add_option('', '--listen', default=False, action='store_true',
+    help='listen to the node in addition to publishing requests and responses')
+
 opts, args = parser.parse_args()
 
 opts.verbose = opts.verbose or opts.Verbose
 
 #-------------------------------------------------
 
-if opts.verbose:
-    print( "setting up listener to monitor what is sent" )
-username, _, password = lvalert_heartbeat.NETRC.netrc(opts.netrc).authenticators(opts.server)
-client = lvalert_heartbeat.HeartbeatPollClient( 
-    lvalert_heartbeat.JID(username+"@"+opts.server+"/"+lvalert_heartbeat.randkey()),
-    password,
-    opts.node,
-    verbose=opts.Verbose,
-)
+if opts.listen:
+    if opts.verbose:
+        print( "setting up listener to monitor what is sent" )
+    username, _, password = lvalert_heartbeat.NETRC.netrc(opts.netrc).authenticators(opts.server)
+    client = lvalert_heartbeat.HeartbeatPollClient( 
+        lvalert_heartbeat.JID(username+"@"+opts.server+"/"+lvalert_heartbeat.randkey()),
+        password,
+        opts.node,
+        verbose=opts.Verbose,
+    )
 
-proc = mp.Process(target=client.loop, args=(opts.wait,))
-proc.start()
+    client.connect()
+    proc = mp.Process(target=client.loop, args=(opts.wait,))
+    proc.start()
 
 #-------------------------------------------------
 
@@ -98,5 +103,7 @@ if opts.poll:
 #-------------------------------------------------
 
 ### clean up forked process
-proc.terminate()
-proc.join() ### just to make sure cleanup signal is sent
+if opts.listen:
+    proc.terminate()
+    proc.join() ### just to make sure cleanup signal is sent
+    client.disconnect()

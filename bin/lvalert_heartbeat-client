@@ -7,6 +7,7 @@ author = "Reed Essick (reed.essick@ligo.org)"
 #-------------------------------------------------
 
 import sys
+import os
 import json
 
 import lvalert_heartbeat
@@ -19,6 +20,9 @@ parser = OptionParser(usage=usage, description=description)
 
 parser.add_option('-v', '--verbose', default=False, action='store_true',
     help="print information during execution")
+
+parser.add_option('-N', '--netrc', default=os.getenv('NETRC', os.path.expanduser('~/.netrc')), type='string',
+    help="the NETRC file containing username,password for --server. DEFAULT references the environmental variable $NETRC if it is set, otherwise points to ~/.netrc")
 
 opts, args = parser.parse_args()
 
@@ -33,4 +37,4 @@ if opts.verbose:
 alert = json.loads( sys.stdin.read() )
 
 ### delegate to response function
-lvalert_heartbeat.respond( name, alert, verbose=opts.verbose )
+lvalert_heartbeat.respond( name, alert, netrc=opts.netrc, verbose=opts.verbose )

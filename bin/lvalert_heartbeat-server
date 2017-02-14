@@ -18,7 +18,8 @@ from optparse import OptionParser
 
 parser = OptionParser(usage=usage, description=description)
 
-parser.add_option('-v', '--verbose', default=False, action='store_true')
+parser.add_option('-v', '--verbose', default=False, action='store_true',
+    help="print information during execution")
 
 opts, args = parser.parse_args()
 

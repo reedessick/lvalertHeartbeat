@@ -17,19 +17,29 @@ from optparse import OptionParser
 
 parser = OptionParser(usage=usage, description=description)
 
-parser.add_option('-v', '--verbose', default=False, action='store_true')
-parser.add_option('-V', '--Verbose', default=False, action='store_true')
+parser.add_option('-v', '--verbose', default=False, action='store_true',
+    help="print information during execution")
+parser.add_option('-V', '--Verbose', default=False, action='store_true',
+    help="print even more information during execution")
 
-parser.add_option('-s', '--server', default='lvalert.cgca.uwm.edu', type='string')
-parser.add_option('-n', '--node', default=None, type='string')
-parser.add_option('-N', '--netrc', default=os.getenv('NETRC', os.path.expanduser('~/.netrc')), type='string')
+parser.add_option('-s', '--server', default='lvalert.cgca.uwm.edu', type='string',
+    help="the LVAlert server")
+parser.add_option('-n', '--node', default=None, type='string',
+    help="the LVAlert pubsub node")
+parser.add_option('-N', '--netrc', default=os.getenv('NETRC', os.path.expanduser('~/.netrc')), type='string',
+    help="the NETRC file containing username,password for --server. DEFAULT references the environmental variable $NETRC if it is set, otherwise points to ~/.netrc")
 
-parser.add_option('', '--wait', default=1.0, type='float')
-parser.add_option('', '--timeout', default=10.0, type='float')
+parser.add_option('', '--wait', default=1.0, type='float',
+    help="how long we wait in each loop of the pyxmpp Client")
+parser.add_option('', '--timeout', default=10.0, type='float',
+    help="how long we wait for responses within lvalert_heartbeat.poll")
 
-parser.add_option('', '--request', default=False, action='store_true')
-parser.add_option('', '--respond', default=False, action='store_true')
-parser.add_option('', '--poll', default=False, action='store_true')
+parser.add_option('', '--request', default=False, action='store_true',
+    help="test sending a request")
+parser.add_option('', '--respond', default=False, action='store_true',
+    help="test sending a response")
+parser.add_option('', '--poll', default=False, action='store_true',
+    help="test polling the network")
 
 opts, args = parser.parse_args()
 

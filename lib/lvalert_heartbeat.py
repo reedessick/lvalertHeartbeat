@@ -134,13 +134,13 @@ class HeartbeatHandler(object):
         if node:
             node = node.prop("node")
         else:
-            print "WRONG"
-            raise RuntimeError, "could not extract node from stanza"
+            if self.client.verbose:
+                print "could not extract node from stanza"
+            return True ### exit here
+#            raise RuntimeError, "could not extract node from stanza"
 
         if node!=client.node: ### we're not interested in this node, so we just return True
             return True
-
-        print "NODE :", node
 
         ### extract the content from the stanza
         c = stanza.xmlnode.children
@@ -152,11 +152,11 @@ class HeartbeatHandler(object):
             except libxml2.treeError:
                 c.next
         else:
-            print "WRONG"
-            raise RuntimeError, "could not extract entry from stanza"
+            if self.client.verbose:
+                print "could not extract entry from stanza"
+            return True ### exit here
+#            raise RuntimeError, "could not extract entry from stanza"
         
-        print "ENTRY :", entry
-
         ### process entry
         packet = Packet(None, client.node)
         packet.loads( entry )

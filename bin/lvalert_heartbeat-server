@@ -6,6 +6,8 @@ author = "Reed Essick (reed.essick@ligo.org)"
 
 #-------------------------------------------------
 
+import sys
+
 import lvalert_heartbeat
 
 from ConfigParser import SafeConfigParser
@@ -66,12 +68,12 @@ for node in config.sections():
     ### FIXME we'll want to convert this into Nagios-friendly format for the production code...
     print( "matching responses : " )
     for expected, response in matching:
-        print( "    expected : %s\n    recieved : %s\n"%(expected.dumps(), received.dumps()) )
+        print >> sys.stdout,  "    expected : %s\n    recieved : %s\n"%(expected.dumps(), received.dumps())
 
     print( "missing responses : " )
     for expected in missing:
-        print( "    expected : %s\n"%(expected.dumps()) )
+        print >> sys.stderr, "    expected : %s\n"%(expected.dumps())
 
     print( "extra responses : " )
     for response in responses:
-        print( "    received : %s\n"%(received.dumps()) )
+        print >> sys.stderr, "    received : %s\n"%(received.dumps())

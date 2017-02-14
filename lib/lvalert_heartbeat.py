@@ -24,12 +24,13 @@ class HeartbeatClient(Client):
     lifted with some modification from lvalert_listen and lvalert_send
     """
 
-    def __init__(self, jid, password, node, key, connection=None, retry=0):
+    def __init__(self, jid, password, node, key, connection=None, retry=0, verbose=False):
         self.jid = jid
         self.node = node
         self.retry = retry
         self.counter = 0
 
+        self.verbose=verbose
         # setup client with provided connection information and identity data
         super(HeartbeatClient, self).__init__(self, self.jid, password,
             auth_methods=["sasl:GSSAPI", "sasl:PLAIN"],
@@ -52,6 +53,8 @@ class HeartbeatClient(Client):
         """
         lifted with only minimal modifications from lvalert_send
         """
+        if self.verbose:
+            print( "success" )
         return True
 
     def onError(self, stanza):
@@ -59,20 +62,23 @@ class HeartbeatClient(Client):
         lifted with only minimal modifications from lvalert_send
         """
         errorNode = stanza.get_error()
-        print( "error type = %s"%errorNode.get_type() )
-        print( "error message = %s"%errorNode.get_message() )
+        if self.verbose:
+            print( "error type = %s"%errorNode.get_type() )
+            print( "error message = %s"%errorNode.get_message() )
         raise RuntimeError
 
     def onTimeout(self, stanza, message, recipient):
         """
         lifted with only minimal modifications from lvalert_send
         """
-        print("operation timed out.  Trying again...")
+        if self.verbose:
+            print("operation timed out.  Trying again...")
         if self.counter < self.retry:
             self.counter += + 1
             self.sendMessage(self.node, message, recipient)
         else:
-            print("Reached max_attempts. Disconnecting...")
+            if self.verbose:
+                print("Reached max_attempts. Disconnecting...")
             raise RuntimeError
         return True
 
@@ -117,8 +123,13 @@ class HeartbeatHandler(object):
         ### process entry
         packet = Packet(None, client.node)
         packet.loads( entry )
-        if packet.isResponse() and (packet['key']==self.key) and (connection!=None): ### send this if it's interesting and we have a connection
-            connection.send( packet )
+        if packet.isResponse() and (packet['key']==self.key): ### send this if it's interesting and we have a connection
+            if connection!=None:
+                connection.send( packet )
+            elif self.client.verbose:
+                print( "RESPONSE: "+packet.dumps() )
+        elif self.client.verbose:
+            print( "UNKNOWN: "+packet.dumps() )
 
         return True
 
@@ -200,7 +211,7 @@ def poll(server, node, netrc=os.getenv('NETRC', os.path.join(os.path.expanduser(
     ### send a request
     if verbose:
         print( "sending request" )
-    request( key, server, node, verbose=verbose, netrc=netrc, verbose=verbose )
+    request( key, server, node, netrc=netrc, verbose=verbose )
 
     ### read in responses in a loop
     if verbose:
@@ -239,7 +250,7 @@ def request( key, server, node, netrc=os.getenv('NETRC', os.path.join(os.path.ex
 
 #---
 
-def respond( name, alert, verbose=False, netrc=os.getenv('NETRC', os.path.join(os.path.expanduser('~'), '.netrc')) ):
+def respond( name, alert, netrc=os.getenv('NETRC', os.path.join(os.path.expanduser('~'), '.netrc')), verbose=False ):
     """
     parses out the relevant information from the LVAlert json packet and responds as necessary
     """

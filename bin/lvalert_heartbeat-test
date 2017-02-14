@@ -1,14 +1,15 @@
 #!/usr/bin/python
 
 usage = "lvalert_heartbeat-test [--options]"
-description = "a script that tests the heartbeat functionality"
+description = "a script that tests the heartbeat functionality. NOTE: this only tests the library fuctions within lvalert_heartbeat.py and does not test lvalert_heartbeat-client, lvalert_heartbeat-server, or lvalertMP_heartbeat.py"
 author = "Reed Essick (reed.essick@ligo.org)"
 
 #-------------------------------------------------
 
-import lvalert_heartbeat
+import os
+import multiprocessing as mp
 
-import subprocess as sp
+import lvalert_heartbeat
 
 from optparse import OptionParser
 
@@ -19,8 +20,12 @@ parser = OptionParser(usage=usage, description=description)
 parser.add_option('-v', '--verbose', default=False, action='store_true')
 parser.add_option('-V', '--Verbose', default=False, action='store_true')
 
-parser.add_option('-s', '--server', defualt='lvalert.cgca.uwm.edu', type='string')
-parser.add_option('-n', '--netrc', default=os.getenv('NETRC', os.path.expanduser('~/.netrc')), type='string')
+parser.add_option('-s', '--server', default='lvalert.cgca.uwm.edu', type='string')
+parser.add_option('-n', '--node', default=None, type='string')
+parser.add_option('-N', '--netrc', default=os.getenv('NETRC', os.path.expanduser('~/.netrc')), type='string')
+
+parser.add_option('', '--wait', default=1.0, type='float')
+parser.add_option('', '--timeout', default=10.0, type='float')
 
 parser.add_option('', '--request', default=False, action='store_true')
 parser.add_option('', '--respond', default=False, action='store_true')
@@ -32,8 +37,18 @@ parser.verbose = opts.verbose or opts.Verbose
 
 #-------------------------------------------------
 
-node = lvalert_heartbeat.randkey() ### get a random node name for the test node
-raise NotImplementedError, 'need to set up a test node, which we create for this run and then clean up when finished'
+if opts.verbose:
+    print( "setting up listener to monitor what is sent" )
+username, password = lvalert_heartbeat.netrc.netrc(opts.netrc).authenticators(opts.server)
+client = lvalert_heartbeat.HeatbeatClient( 
+    lvalert_heartbeat.JID(username+"@"+opts.server+"/"+lvalert_heartbeat.randkey()),
+    password,
+    opts.node,
+    verbose=opts.Verbose,
+)
+
+proc = mp.Process(target=client.loop, args=(opts.wait))
+proc.start()
 
 #-------------------------------------------------
 
@@ -42,16 +57,20 @@ if opts.request:
         print( "testing lvalert_hearbeat.request" )
 
     key = lvalert_heartbeat.randkey()
-    request( key, opts.server, node, netrc=opts.netrc, verbose=opts.Verbose )
-    raise NotImplementedError, 'testing lvalert_heartbeat.request'
+    request( key, opts.server, opts.node, netrc=opts.netrc, verbose=opts.Verbose )
 
 #------------------------
 
-if opts.respond
+if opts.respond:
     if opts.verbose:
         print( "testing lvalert_heartbeat.respond" )
 
-    raise NotImplementedError, 'testing lvalert_heartbeat.respond'
+    ### generate a request
+    key = lvalert_heartbeat.randkey()
+    packet = lvalert_heartbeat.Packet(opts.server, opts.node, ptype='request', key=key)
+
+    name = 'lvalert_heartbeat-test'
+    lvalert_heartbeat.respond( name, packet, netrc=opts.netrc, verbose=opts.Verbose )
 
 #------------------------
 
@@ -59,8 +78,13 @@ if opts.poll:
     if opts.verbose:
         print( "testing lvalert_heartbeat.poll" )
 
-    raise NotImplementedError, 'testing lvalert_heartbeat.poll'
+    responses = lvalert_heartbeat.poll(opts.server, opts.node, netrc=opts.netrc, wait=opts.wait, timeout=opts.timeout, verbose=opts.Verbose)
+    if opts.Verbose:
+        for response in responses:
+            print response.dumps()
 
 #-------------------------------------------------
 
-raise NotImplementedError, 'need to clean up test node!'
+### clean up forked process
+proc.terminate()
+proc.join() ### just to make sure cleanup signal is sent

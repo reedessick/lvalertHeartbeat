@@ -6,6 +6,7 @@ author = "Reed Essick (reed.essick@ligo.org)"
 
 #-------------------------------------------------
 
+import os
 import sys
 
 import lvalert_heartbeat
@@ -39,19 +40,19 @@ for node in config.sections():
 
     ### extract setup for this node
     server = config.get(node, 'server')
-    netrc  = os.path.expanduser(config.get(node, 'netrc')) if config.has_option(node, netrc) \
+    netrc  = os.path.expanduser(config.get(node, 'netrc')) if config.has_option(node, 'netrc') \
         else os.getenv('NETRC', os.path.join(os.path.expanduser('~'), '.netrc'))
 
     wait   = config.getfloat(node, 'wait')
     timeout = config.getfloat(node, 'timeout')
 
     ### extract expected respones and format them
-    expected_respones = [lvalert_heartbeat.Packet(server, node, **dict(zip('name user hostname'.split(), _.split()))) for _ in config.get(node, 'responses').split('\n') if _]
+    expected_responses = [lvalert_heartbeat.Packet(server, node, **dict(zip('name user hostname'.split(), _.split()))) for _ in config.get(node, 'responses').split('\n') if _]
 
     ### actually poll this node
     if opts.verbose:
         print( "polling network via %s->%s"%(server, node) )
-    respones = lvalert_heartbeat.poll(server, node, netrc=netrc, wait=wait, timeout=timeout, verbose=opts.verbose)
+    responses = lvalert_heartbeat.poll(server, node, netrc=netrc, wait=wait, timeout=timeout, verbose=opts.verbose)
 
     ### compare expected respones to observed responses
     matching = []
@@ -60,7 +61,7 @@ for node in config.sections():
         for i in xrange(len(responses)):
             response = responses[i]
             if (expected['name']==response['name']) and (expected['user']==response['user']) and (expected['hostname']==response['hostname']):
-                matching.append( expected, responses.pop(i) )
+                matching.append( (expected, responses.pop(i)) )
                 break
         else:
             missing.append( expected )
@@ -69,7 +70,7 @@ for node in config.sections():
     ### FIXME we'll want to convert this into Nagios-friendly format for the production code...
     print( "matching responses : " )
     for expected, response in matching:
-        print >> sys.stdout,  "    expected : %s\n    recieved : %s\n"%(expected.dumps(), received.dumps())
+        print >> sys.stdout,  "    expected : %s\n    recieved : %s\n"%(expected.dumps(), response.dumps())
 
     print( "missing responses : " )
     for expected in missing:
@@ -77,4 +78,4 @@ for node in config.sections():
 
     print( "extra responses : " )
     for response in responses:
-        print >> sys.stderr, "    received : %s\n"%(received.dumps())
+        print >> sys.stderr, "    received : %s\n"%(response.dumps())

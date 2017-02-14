@@ -5,47 +5,53 @@ author = "Reed Essick (reed.essick@ligo.org)"
 
 import os
 import socket
+import getpass
 import binascii
+import netrc as NETRC
+import json
+import time
 
 import multiprocessing as mp
-
-import json
 
 from ligo.lvalert import pubsub
 
 from pyxmpp.all import JID
 from pyxmpp.all import TLSSettings
 from pyxmpp.jabber.all import Client
+from pyxmpp.interface import implements
+from pyxmpp.interfaces import IMessageHandlersProvider
 
 #-------------------------------------------------
 
-class HeartbeatClient(Client):
+class HeartbeatSendClient(Client):
     """
-    lifted with some modification from lvalert_listen and lvalert_send
+    lifted with some modification from lvalert_send
     """
 
-    def __init__(self, jid, password, node, key, connection=None, retry=0, verbose=False):
+    def __init__(self, jid, password, node, message, recipient, retry=0, verbose=False):
         self.jid = jid
         self.node = node
+        self.message = message
+        self.recipient = recipient
         self.retry = retry
         self.counter = 0
-
         self.verbose=verbose
+
         # setup client with provided connection information and identity data
-        super(HeartbeatClient, self).__init__(self, self.jid, password,
+        Client.__init__(self, self.jid, password,
             auth_methods=["sasl:GSSAPI", "sasl:PLAIN"],
             tls_settings=TLSSettings(require=True, verify_peer=False),
-            keepalive=30,
         )
 
-        self.interface_providers = [HeartbeatHandler(self, connection, key)] ### what to do when receiving messages
+    def session_started(self):
+        self.sendMessage()
 
-    def sendMessage(self, message, recipient):
+    def sendMessage(self):
         """
         lifted with only minimal modifications from lvalert_send
         """
-        ps = pubsub.PubSub(from_jid=self.jid, to_jid=recipientt, stream=self.stream, stanza_type="get")
-        ps.publish(message, self.node)
+        ps = pubsub.PubSub(from_jid=self.jid, to_jid=self.recipient, stream=self.stream, stanza_type="get")
+        ps.publish(self.message, self.node)
         self.stream.set_response_handlers(ps, self.onSuccess, self.onError, lambda stanza: self.onTimeout(stanza, message, recipient))
         self.stream.send(ps)
 
@@ -55,6 +61,7 @@ class HeartbeatClient(Client):
         """
         if self.verbose:
             print( "success" )
+        self.disconnect()
         return True
 
     def onError(self, stanza):
@@ -65,6 +72,7 @@ class HeartbeatClient(Client):
         if self.verbose:
             print( "error type = %s"%errorNode.get_type() )
             print( "error message = %s"%errorNode.get_message() )
+        self.disconnect()
         raise RuntimeError
 
     def onTimeout(self, stanza, message, recipient):
@@ -76,11 +84,32 @@ class HeartbeatClient(Client):
         if self.counter < self.retry:
             self.counter += + 1
             self.sendMessage(self.node, message, recipient)
+            return True
         else:
             if self.verbose:
                 print("Reached max_attempts. Disconnecting...")
+            self.disconnect()
             raise RuntimeError
-        return True
+
+#-------------------------------------------------
+
+class HeartbeatPollClient(Client):
+    """
+    lifted with some modification from lvalert_listen
+    """
+
+    def __init__(self, jid, password, node, key=None, connection=None, retry=0, verbose=False):
+        self.node = node
+
+        self.verbose=verbose
+        # setup client with provided connection information and identity data
+        Client.__init__(self, jid, password,
+            auth_methods=["sasl:GSSAPI", "sasl:PLAIN"],
+            tls_settings=TLSSettings(require=True, verify_peer=False),
+            keepalive=30,
+        )
+
+        self.interface_providers = [HeartbeatHandler(self, connection, key)] ### what to do when receiving messages
 
 #------------------------
 
@@ -88,6 +117,8 @@ class HeartbeatHandler(object):
     """
     lifted with some modification from lvalert_listen
     """
+
+    implements(IMessageHandlersProvider)
 
     def __init__(self, client, connection, key):
         self.client = client
@@ -103,10 +134,13 @@ class HeartbeatHandler(object):
         if node:
             node = node.prop("node")
         else:
+            print "WRONG"
             raise RuntimeError, "could not extract node from stanza"
 
         if node!=client.node: ### we're not interested in this node, so we just return True
             return True
+
+        print "NODE :", node
 
         ### extract the content from the stanza
         c = stanza.xmlnode.children
@@ -118,18 +152,23 @@ class HeartbeatHandler(object):
             except libxml2.treeError:
                 c.next
         else:
+            print "WRONG"
             raise RuntimeError, "could not extract entry from stanza"
         
+        print "ENTRY :", entry
+
         ### process entry
         packet = Packet(None, client.node)
         packet.loads( entry )
         if packet.isResponse() and (packet['key']==self.key): ### send this if it's interesting and we have a connection
             if connection!=None:
+                if self.client.verbose:
+                    print( "RESPONSE : "+packet.dumps() )
                 connection.send( packet )
             elif self.client.verbose:
-                print( "RESPONSE: "+packet.dumps() )
+                print( "RESPONSE : "+packet.dumps() )
         elif self.client.verbose:
-            print( "UNKNOWN: "+packet.dumps() )
+            print( "UNKNOWN : "+packet.dumps() )
 
         return True
 
@@ -170,16 +209,34 @@ def randkey():
     """
     return binascii.b2a_hex(os.urandom(15))
 
-def send( alert, server, node, netrc, retry=0 ):
+#---
+
+def send( alert, server, node, netrc, retry=0, verbose=False ):
     """
     actually sends the alert via the pubsub node
     """
-    username, password = netrc.netrc(netrc).authenticators(server)
-    client = HeatbeatClient( JID(username+"@"+server+"/"+randkey()), password, node, retry=retry )
-
+    username, _, password = NETRC.netrc(netrc).authenticators(server)
+    client = HeartbeatSendClient( 
+        JID(username+"@"+server+"/"+randkey()), 
+        password, 
+        node, 
+        alert.dumps(), 
+        JID('pubsub.'+server), 
+        retry=retry, 
+        verbose=verbose 
+    )
+   
     client.connect()
-    client.sendMessage(alert.dumps(), JID("pubsub."+server))
-    client.disconnect()
+    try:
+        client.loop(1)
+    except KeyboardInterrupt:
+        client.disconnect()
+
+    ### NOT sure why the following didn't work
+#    print "sending message"
+#    client.sendMessage()
+#    print "disconnecting"
+#    client.disconnect()
 
 #---
 
@@ -200,11 +257,11 @@ def poll(server, node, netrc=os.getenv('NETRC', os.path.join(os.path.expanduser(
     conn1, conn2 = mp.Pipe() 
 
     ### set up the client
-    username, password = netrc.netrc(netrc).authenticators(server)
-    client = HeartbeatClient( JID(username+"@"+server+"/"+randkey()), password, node, key, connection=conn2 )
+    username, _, password = NETRC.netrc(netrc).authenticators(server)
+    client = HeartbeatPollClient( JID(username+"@"+server+"/"+randkey()), password, node, key, connection=conn2 )
 
     ### set up process
-    proc = mp.Process(target=client.loop, args=(wait)) 
+    proc = mp.Process(target=client.loop, args=(wait,)) 
     proc.start() ### start it 
     conn2.close() ### close the forked proc's end of the connection
 
@@ -218,17 +275,13 @@ def poll(server, node, netrc=os.getenv('NETRC', os.path.join(os.path.expanduser(
         print( "listening" )
     responses = []
     end = time.time() + timeout
-    while time.time() < end:
+    while proc.is_alive() and (time.time() < end):
         if conn1.poll(): ### there's something to read
             responses.append( conn1.recv() )
         time.sleep(wait)
 
-    ### kill process because we're done with it
-    proc.terminate() 
-
-    ### read in any remaining responses
-    while conn1.poll():
-        responses.append( conn1.recv() )
+    if proc.is_alive():
+        proc.terminate() ### kill process because we're done with it
     conn1.close()
 
     ### return all the responses received
@@ -246,7 +299,7 @@ def request( key, server, node, netrc=os.getenv('NETRC', os.path.join(os.path.ex
     packet = Packet(server, node, ptype='request', key=key)
     if verbose:
         print( "%s->%s : %s"%(server, node, packet.dumps()) )
-    send( packet, server, node, netrc )
+    send( packet, server, node, netrc, verbose=verbose )
 
 #---
 
@@ -256,8 +309,8 @@ def respond( name, alert, netrc=os.getenv('NETRC', os.path.join(os.path.expandus
     """
     if verbose:
         print( "parsing : %s"%alert )
-    packet = Packet()
-    packet.parse(alert)
+    packet = Packet(None, None) ### server and node will be updatd from the request packet
+    packet.parse(alert)         ### update everything based on the alert
 
     if packet.isRequest():
         packet['ptype'] = 'response' ### change this packet to a "response"
@@ -271,7 +324,7 @@ def respond( name, alert, netrc=os.getenv('NETRC', os.path.join(os.path.expandus
         ### send the packet
         if verbose:
             print( "sending response : %s"%(packet.dumps()) )
-        send( packet, packet['server'], packet['node'], netrc )
+        send( packet, packet['server'], packet['node'], netrc, verbose=verbose )
 
     else: ### not a request, so we do nothing
         if verbose:

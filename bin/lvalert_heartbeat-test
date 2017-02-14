@@ -33,21 +33,21 @@ parser.add_option('', '--poll', default=False, action='store_true')
 
 opts, args = parser.parse_args()
 
-parser.verbose = opts.verbose or opts.Verbose
+opts.verbose = opts.verbose or opts.Verbose
 
 #-------------------------------------------------
 
 if opts.verbose:
     print( "setting up listener to monitor what is sent" )
-username, password = lvalert_heartbeat.netrc.netrc(opts.netrc).authenticators(opts.server)
-client = lvalert_heartbeat.HeatbeatClient( 
+username, _, password = lvalert_heartbeat.NETRC.netrc(opts.netrc).authenticators(opts.server)
+client = lvalert_heartbeat.HeartbeatPollClient( 
     lvalert_heartbeat.JID(username+"@"+opts.server+"/"+lvalert_heartbeat.randkey()),
     password,
     opts.node,
     verbose=opts.Verbose,
 )
 
-proc = mp.Process(target=client.loop, args=(opts.wait))
+proc = mp.Process(target=client.loop, args=(opts.wait,))
 proc.start()
 
 #-------------------------------------------------
@@ -57,7 +57,7 @@ if opts.request:
         print( "testing lvalert_hearbeat.request" )
 
     key = lvalert_heartbeat.randkey()
-    request( key, opts.server, opts.node, netrc=opts.netrc, verbose=opts.Verbose )
+    lvalert_heartbeat.request( key, opts.server, opts.node, netrc=opts.netrc, verbose=opts.Verbose )
 
 #------------------------
 
@@ -69,6 +69,7 @@ if opts.respond:
     key = lvalert_heartbeat.randkey()
     packet = lvalert_heartbeat.Packet(opts.server, opts.node, ptype='request', key=key)
 
+    ### responding to that request
     name = 'lvalert_heartbeat-test'
     lvalert_heartbeat.respond( name, packet, netrc=opts.netrc, verbose=opts.Verbose )
 
@@ -78,6 +79,7 @@ if opts.poll:
     if opts.verbose:
         print( "testing lvalert_heartbeat.poll" )
 
+    ### poll a network of listeners
     responses = lvalert_heartbeat.poll(opts.server, opts.node, netrc=opts.netrc, wait=opts.wait, timeout=opts.timeout, verbose=opts.Verbose)
     if opts.Verbose:
         for response in responses:

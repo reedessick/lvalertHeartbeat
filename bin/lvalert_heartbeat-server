@@ -20,7 +20,7 @@ from optparse import OptionParser
 parser = OptionParser(usage=usage, description=description)
 
 parser.add_option('-v', '--verbose', default=False, action='store_true',
-    help="print information during execution")
+    help="print information to STDERR during execution")
 
 opts, args = parser.parse_args()
 
@@ -31,11 +31,18 @@ configname = args[0]
 
 ### read in config file
 if opts.verbose:
-    print( "reading config : %s"%configname )
+    print >> sys.stderr, "reading config : %s"%configname
 config = SafeConfigParser()
 config.read(configname)
 
 ### iterate over sections, polling once for each section
+# data structures built through the loop
+returncode = 0
+serviceOutput = ''
+servicePerfData = ''
+longServiceOutput = ''
+
+# actuall iterate
 for node in config.sections():
 
     ### extract setup for this node
@@ -47,11 +54,12 @@ for node in config.sections():
     timeout = config.getfloat(node, 'timeout')
 
     ### extract expected respones and format them
-    expected_responses = [lvalert_heartbeat.Packet(server, node, **dict(zip('name user hostname'.split(), _.split()))) for _ in config.get(node, 'responses').split('\n') if _]
+    expected_responses = [lvalert_heartbeat.Packet(server, node, **dict(zip('name user hostname'.split(), _.split()))) \
+        for _ in config.get(node, 'responses').split('\n') if _]
 
     ### actually poll this node
     if opts.verbose:
-        print( "polling network via %s->%s"%(server, node) )
+        print >> sys.stderr, "polling network via %s->%s"%(server, node)
     responses = lvalert_heartbeat.poll(server, node, netrc=netrc, wait=wait, timeout=timeout, verbose=opts.verbose)
 
     ### compare expected respones to observed responses
@@ -67,15 +75,47 @@ for node in config.sections():
             missing.append( expected )
 
     ### report the result
-    ### FIXME we'll want to convert this into Nagios-friendly format for the production code...
-    print( "matching responses : " )
-    for expected, response in matching:
-        print >> sys.stdout,  "    expected : %s\n    recieved : %s\n"%(expected.dumps(), response.dumps())
+    if opts.verbose:
+        print >> sys.stderr, "matching responses : "
+        for expected, response in matching:
+            print >> sys.stderr,  "    expected : %s\n    recieved : %s"%(expected.dumps(), response.dumps())
 
-    print( "missing responses : " )
-    for expected in missing:
-        print >> sys.stderr, "    expected : %s\n"%(expected.dumps())
+        print >> sys.stderr,  "\nmissing responses : "
+        for expected in missing:
+            print >> sys.stderr, "    expected : %s"%(expected.dumps())
 
-    print( "extra responses : " )
-    for response in responses:
-        print >> sys.stderr, "    received : %s\n"%(response.dumps())
+        print >> sys.stderr, "\nextra responses : "
+        for response in responses:
+            print >> sys.stderr, "    received : %s"%(response.dumps())
+
+    ### figure out the state of this node
+    if missing: ### we didn't hear from some people, so the state is CRITICAL
+        returncode = max(returncode, 2)
+    elif responses: ### we heard from everyone, but also some extras, so this should just be a WARNING
+        returncode = max(returncode, 1)
+    else: ### everything is as expected, so this is OK
+        pass ### equivalent to : returncode = max(returncode, 0)
+
+    ### format result for Nagios
+    ### do nothing for serviceOutput because we handle that later
+    ### do nothing for servicePerfData because we don't return anything in that string
+    ### write a line to longServiceOutput describing this node
+    longServiceOutput += '%s : %d expected responses received / %d unexpected responses received / %d expected responses NOT received'\
+        %(node, len(matching), len(responses), len(missing))
+
+### finish formatting serviceOutput
+if returncode==0:
+    serviceOutput += 'Service OK - all expected responses, and only expected responses, received'
+
+elif returncode==1:
+    serviceOutput += 'Service WARNING - all expected responses, as well as at least one unexpected response, received'
+
+elif returncode==2:
+    serviceOutput += 'Service CRITICAL - at least one expected response not received'
+
+else:
+    raise ValueError, 'unknown returncode=%d'%returncode
+
+### print Nagios formatted response
+print >> sys.stdout, "%s|%s\n%s"%(serviceOutput, servicePerfData, longServiceOutput.strip('\n'))
+sys.exit(returncode)

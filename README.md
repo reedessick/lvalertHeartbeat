@@ -28,3 +28,45 @@ There are 2 modules included
 ## dependencies
 
 This package depends on some standard Python libraries in addition to LVAlert and lvalertMP.
+
+----------------------------------------------------------------------------------------------------------
+
+## Security risks
+
+Here we briefly discuss possible security risks associated with this monitor and with LVAlert in general.
+
+### Authentication
+
+LVAlert authenticates with username/password pairs stored within .netrc files locally.
+Specifically, a connection is established with the server using Python xmpp.JID objects instantiated with `username@server/resource` and verified with a password.
+These username/password pairs are extracted using the standard Python netrc library
+
+    >> netrc.netrc('path/to/netrc').authenticators('server')
+
+Read/write permissions on these files are managed at the system level with standard Unix tools. 
+
+For the current implementation to work, netrc files will need to be shared between the client-side user and the server-side request.
+This is required for multiple processes to publish to the same node; currently only the node's owner can publish to it and therefore both the client-side and server-side processes must authenticate as the owner of a node.
+Neither the content nor location of the netrc files will be shared over the LVAlert network.
+Only the server's name (e.g.; "lvalert.cgca.uwm.edu") is distributed along with the request/response messages.
+
+We expect the only additional security risk associated with lvalertHeartbeat above what is standard for all LVAlert listeners is the one-time risk associated with moving netrc files between machines and the additional risk associated with storing multiple copies of a username/password.
+
+### Consequences of security leaks
+
+The main threat of a compromised username/password pair is a DOS attack on the LVAlert server. 
+This would prevent GraceDb from issuing announcements about events and would effectively shut down all automated follow-up.
+In particular, it is unlikely that many humans would be woken up for interesting events because that action is prompted by the application of a particular label within GraceDb and the software that applies that label receives information from GraceDb via LVAlert.
+
+Another possible concern is a non-LVC member listening in on alerts which could contain information that is currently not released to electromagnetic observers (e.g.; component masses).
+This would not prevent us from actually perform our science but could cause embarrassment.
+
+### alternate architectures
+
+We may also consider defining the concept of a public LVAlert node.
+This would allow multiple username/password pairs to publish to the same node and remove the need to share netrc files between the client and server.
+It is unclear whether this is supported within LVAlert at this time.
+
+We could also manage the "response" messages outside of LVAlert, again removing the need to share netrc files.
+In particular, if the client-side executable annotated/touched a web-page stored under that user's `public_html`, a Nagios monitor could scrape these web pages and check for updated information.
+This invovles more "moving pieces" and it is not clear whether it would be better than the current implementation in the long-run.

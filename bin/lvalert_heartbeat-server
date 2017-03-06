@@ -9,7 +9,7 @@ author = "Reed Essick (reed.essick@ligo.org)"
 import os
 import sys
 
-import lvalert_heartbeat
+from lvalertHeartbeat import lvalert_heartbeat
 
 from ConfigParser import SafeConfigParser
 

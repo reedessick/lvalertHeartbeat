@@ -4,7 +4,7 @@ author = "Reed Essick (reed.essick@ligo.org)"
 #-------------------------------------------------
 
 from numpy import infty
-import lvalert_heartbeat
+from lvalertHeartbeat import lvalert_heartbeat
 
 from lvalertMP.lvalert import lvalertMPutils
 
